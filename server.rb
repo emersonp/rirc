@@ -97,6 +97,8 @@ class Server
         process_private_message msg, nick_name, client
       when /\ALIST/i
         list_all_channels client
+      when /\ANAMES/i
+        list_all_users msg, client
       else
         @connections[:clients].each do |other_name, other_client|
           unless other_name == nick_name
@@ -107,39 +109,54 @@ class Server
   end
 
   def add_user_to_channel msg, nick_name, client
-    #puts 'Got this far!'
-    channel = msg.sub(/^[^#]*/, '').match(/(?<=#)\S+/)[0]
+    channel = msg.sub(/^[^#]*/, '').match(/(?<=#)\S+/)[0].downcase
     puts "Channel = #{channel}, nick_name: #{nick_name}, client: #{client}"
     if @connections[:rooms][channel]
-      @connections[:rooms][channel] << client
+      @connections[:rooms][channel] << nick_name
     else
-      @connections[:rooms][channel] = [client]
+      @connections[:rooms][channel] = [nick_name]
     end
     client.puts "You joined channel ##{channel}"
+    broadcast_to_all channel, "[#{channel}] #{nick_name} joined the channel."
     puts "Channel Members: #{@connections[:rooms][channel]}"
   end
 
+  def broadcast_to_all channel, msg
+    @connections[:clients].each do |nick_name, client|
+      client.puts msg if @connections[:rooms][channel].include?(nick_name)
+    end
+  end
+
   def list_all_channels client
-    #channels = []
-    #@connections[:rooms].each do |channel|
-    #  channels << channel
-    #end
     client.puts "SERVER: The channels on this server are:\n##{@connections[:rooms].keys.join("\n#")}"
+  end
+
+  def list_all_users msg, client
+    list_of_users = []
+    if msg =~ /(?<=#)\S+/i
+      channel = msg.sub(/^[^#]*/, '').match(/(?<=#)\S+/)[0].downcase
+      list_of_users = @connections[:rooms][channel]
+      client.puts "SERVER: List of users in channel ##{channel}:"
+    else
+      list_of_users = @connections[:clients].keys
+      client.puts 'SERVER: List of users on server:'
+    end
+    client.puts list_of_users.join("\n")
   end
 
   def process_private_message msg, nick_name, client
     msg = msg.sub(/\APRIVMSG /i, '')
     if msg[0] == '#'
       channel = msg.match(/(?<=#)\S+/)[0]
-      puts "Proccess_Private_Message: #{channel}"
+      puts "Process_Private_Message: #{channel}"
       unless @connections[:rooms][channel]
         client.puts "SERVER: Channel '#{channel}' does not exist."
         return
       end
       msg = msg[1..-1].sub(channel, '')
       @connections[:clients].each do |other_name, other_client|
-        if @connections[:rooms][channel].include?(client) &&
-               @connections[:rooms][channel].include?(other_client) &&
+        if @connections[:rooms][channel].include?(nick_name) &&
+               @connections[:rooms][channel].include?(other_name) &&
                nick_name != other_name
           other_client.puts "[#{channel}] #{nick_name}: #{msg.to_s}"
         end

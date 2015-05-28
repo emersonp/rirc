@@ -23,14 +23,17 @@ class Client
     case msg
     when ''
       return
+    when /\A\/JOIN/i
+      channel = msg.sub(/^[^#]*/, '').match(/(?<=#)\S+/)[0].downcase
+      @channel_main = channel
+      @channels << channel
+      puts "Channel main now ##{@channel_main}"
+      @server.puts msg.sub(/\A\//, '')
+    when /\A\/MAIN/i
+      @channel_main = msg.match(/(?<=#)\S+/)[0]
+      puts "Channel main now ##{@channel_main}"
     when /\A\//
       @server.puts msg.sub(/\A\//, '')
-    when /\A\\JOIN/i
-      channel = msg.sub(/^[^#]*/, '').match(/(?<=#)\S+/)[0]
-      unless @channel_main
-        @channel_main = channel
-      end
-        @channels << channel
     else
       @server.puts "PRIVMSG ##{@channel_main} :" + msg
     end
@@ -56,6 +59,7 @@ class Client
         user_msg = gets.chomp
         if user_msg == "exit"
           puts 'Goodbye!'
+          @server.close
           exit
         else
           parse_and_send_user_msg user_msg
