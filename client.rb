@@ -49,7 +49,7 @@ class Client
           puts "Goodbye!"
           exit
         else
-          puts "Sending: #{user_msg}".red
+          puts "Sending: #{user_msg}".pink
           parse_and_send_user_msg user_msg
         end
       end

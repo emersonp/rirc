@@ -21,20 +21,19 @@ class Server
       loop_count = 0
       loop do
         loop_count += 1
-        puts "\nPing Loop Count: #{loop_count}"
+        #puts "\nPing Loop Count: #{loop_count}"
         @connections[:clients].each do |nick_name, client|
           @connections[:status][client] = false
-
           begin
             client.puts "PING #{Time.now.to_s}"
-            puts "Pinged #{client}/#{nick_name} at #{Time.now.to_s}"
+            #puts "Pinged #{client}/#{nick_name} at #{Time.now.to_s}"
           rescue Exception => myException
-            puts "Exception rescued : #{myException}"
+            #puts "Exception rescued : #{myException}"
             @connections[:clients].delete(nick_name)
             @connections[:status].delete(nick_name)
           end
         end
-        sleep 5
+        sleep 20
         @connections[:clients].each do |nick_name, client|
           unless @connections[:status][client]
             client.close
@@ -71,8 +70,6 @@ class Server
 
   def listen_user_msgs user_name, client
     loop do
-      #msg = client.gets.chomp
-
       readfds = nil
       msg = nil
       begin
@@ -85,12 +82,6 @@ class Server
       end
 
       process_user_msgs msg, user_name, client if msg
-
-      #@connections[:clients].each do |other_name, other_client|
-      #  unless other_name == user_name
-      #    other_client.puts "#{user_name.to_s}: #{msg}"
-      #  end
-      #end
     end
   end
 
@@ -98,21 +89,58 @@ class Server
     puts "#{client}/#{nick_name}: #{msg}"
     case msg
       when /\AJOIN/
-        puts 'Got this far!'
-        channel = msg.sub(/^[^#]*/, '').match(/(?<=#)\S+/)[0]
-        puts "Channel = #{channel}, nick_name: #{nick_name}, client: #{client}"
-        @connections[:rooms][channel] << client
-        client.puts "Joining channel: #{channel}"
-        puts "Channel Members: #{@connections[:rooms][channel]}"
+        add_user_to_channel msg, nick_name, client
       when /\APONG/
-        puts "Pong received from #{client}."
         @connections[:status][client] = true
+      when /\APRIVMSG/
+        process_private_message msg, nick_name, client
       else
         @connections[:clients].each do |other_name, other_client|
           unless other_name == nick_name
             other_client.puts "#{nick_name.to_s}: #{msg}"
           end
         end
+    end
+  end
+
+  def add_user_to_channel msg, nick_name, client
+    puts 'Got this far!'
+    channel = msg.sub(/^[^#]*/, '').match(/(?<=#)\S+/)[0]
+    puts "Channel = #{channel}, nick_name: #{nick_name}, client: #{client}"
+    if @connections[:rooms][channel]
+      @connections[:rooms][channel] << client
+    else
+      @connections[:rooms][channel] = [client]
+    end
+    client.puts "You joined channel ##{channel}"
+    puts "Channel Members: #{@connections[:rooms][channel]}"
+  end
+
+  def process_private_message msg, nick_name, client
+    msg = msg.sub(/\APRIVMSG /, '')
+    if msg[0] == '#'
+      channel = msg.match(/(?<=#)\S+/)[0]
+      unless @connections[:rooms][channel]
+        client.puts "Channel '#{channel}' does not exist."
+        return
+      end
+      msg = msg[1..-1].sub(channel, '')
+      @connections[:clients].each do |other_name, other_client|
+        if @connections[:rooms][channel].include?(client) &&
+               @connections[:rooms][channel].include?(other_client) &&
+               nick_name != other_name
+          other_client.puts "[#{channel}] #{nick_name}: #{msg.to_s}"
+        end
+      end
+    elsif @connections[:clients].keys.include?(target_name = msg.match(/\A\S+/)[0].to_sym)
+      puts "#{target_name.to_s} targeted with private message."
+      @connections[:clients].each do |other_name, other_client|
+        if target_name == other_name
+          other_client.puts "PRIVATE[#{nick_name}]: #{msg.sub(msg.match(/\A\S+/)[0] + ' ', '')}"
+        end
+      end
+    else
+      client.puts "'#{msg.match(/\A\S+/)[0]}' not recognized as nickname. Use /LIST to see all participants in chat."
     end
   end
 end
