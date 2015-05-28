@@ -5,8 +5,8 @@ class Client
   def initialize (server, login_params)
     @DEBUG = true
 
-    @channel_main = "practicing-ruby-testing"
-    @channels = [] << @channel_main
+    @channel_main = nil
+    @channels = []
     @login = login_params
     @server = server
     @request = nil
@@ -20,8 +20,17 @@ class Client
   end
 
   def parse_and_send_user_msg msg
-    if /\A\// =~ msg
+    case msg
+    when ''
+      return
+    when /\A\//
       @server.puts msg.sub(/\A\//, '')
+    when /\A\\JOIN/i
+      channel = msg.sub(/^[^#]*/, '').match(/(?<=#)\S+/)[0]
+      unless @channel_main
+        @channel_main = channel
+      end
+        @channels << channel
     else
       @server.puts "PRIVMSG ##{@channel_main} :" + msg
     end
@@ -32,7 +41,9 @@ class Client
       loop do
         server_msg = @server.gets.chomp
         server_msg_type = test_server_msg server_msg
-        puts server_msg if server_msg_type == "default"
+        puts server_msg if server_msg_type == 'default'
+        puts server_msg.red if server_msg_type == 'private'
+        puts server_msg.green if server_msg_type == 'server'
       end
     end
   end
@@ -41,15 +52,12 @@ class Client
     @request = Thread.new do
         @server.puts "NICK #{@login[:nick]}"
         puts "NICK #{@login[:nick]}" if @DEBUG
-        #@server.puts "USER #{@login[:nick]} #{@login[:mode]} * : #{@login[:real_name]}"
-        #@server.puts "JOIN #practicing-ruby-testing"
       loop do
         user_msg = gets.chomp
         if user_msg == "exit"
-          puts "Goodbye!"
+          puts 'Goodbye!'
           exit
         else
-          puts "Sending: #{user_msg}".pink
           parse_and_send_user_msg user_msg
         end
       end
@@ -60,9 +68,13 @@ class Client
     case
       when msg.match(/\APING/)
         @server.puts "#{msg.sub(/PING/, 'PONG')}"
-        return "ping"
+        return 'ping'
+      when msg.match(/\APRIVATE from/)
+        return 'private'
+      when msg.match(/\ASERVER: /)
+        return 'server'
       else
-        "default"
+        'default'
     end
   end
 end
@@ -75,6 +87,6 @@ server = TCPSocket.open host, port
 
 puts "Nickname?"
 nickname = gets.chomp
-login_params = {nick: nickname, mode: 0, real_name: "Parker Emerson"}
+login_params = {nick: nickname, mode: 0, real_name: 'Parker Emerson'}
 
 Client.new server, login_params
