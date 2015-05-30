@@ -110,7 +110,9 @@ class Server
       when /\AOPER/i
         make_operator msg, client
       when /\APART /i
-        remove_user_from_channel msg, nick, client
+        drop_user_from_channel msg, nick, client
+      when /\APARTALL/i
+        drop_user_from_all_channels msg, nick, client
       else
         @connections[:clients].each do |other_name, other_client|
           unless other_name == nick
@@ -129,13 +131,15 @@ class Server
       @connections[:rooms][channel] = [nick]
     end
     client.puts "You joined channel ##{channel}"
-    broadcast_to_all channel, "[#{channel}] #{nick} joined the channel."
+    broadcast_to_channel channel, "[#{channel}] #{nick} joined the channel."
     puts "Channel Members: #{@connections[:rooms][channel]}"
   end
 
-  def broadcast_to_all channel, msg
+  def broadcast_to_channel channel, msg, sender=nil
     @connections[:clients].each do |nick_name, client|
-      client.puts msg if @connections[:rooms][channel].include?(nick_name)
+      unless nick_name == sender
+        client.puts msg if @connections[:rooms][channel].include?(nick_name)
+      end
     end
   end
 
@@ -182,13 +186,7 @@ class Server
         return
       end
       msg = msg[1..-1].sub(channel, '')
-      @connections[:clients].each do |other_name, other_client|
-        if @connections[:rooms][channel].include?(nick_name) &&
-               @connections[:rooms][channel].include?(other_name) &&
-               nick_name != other_name
-          other_client.puts "[#{channel}] #{nick_name}: #{msg.to_s}"
-        end
-      end
+      broadcast_to_channel channel, "[#{channel}] #{nick_name}: #{msg.to_s}", nick_name
     elsif @connections[:clients].keys.include?(target_name = msg.match(/\A\S+/)[0].to_sym)
       puts "#{target_name.to_s} targeted with private message."
       @connections[:clients].each do |other_name, other_client|
@@ -201,7 +199,7 @@ class Server
     end
   end
 
-  def remove_user_from_channel msg, nick, client
+  def drop_user_from_channel msg, nick, client
     msg = msg.sub(/\Apart /i, '')
     if msg[0] == '#'
       channel = msg.match(/(?<=#)\S+/)[0]
@@ -211,12 +209,26 @@ class Server
           @connections[:rooms].delete(channel)
         end
         client.puts "SERVER: You dropped from channel ##{channel}."
+        if msg.match(/(?<=\s).+/)
+          broadcast_to_channel channel, "[#{channel}] User #{nick} left channel: #{msg.match(/(?<=\s).+/)[0]}"
+        else
+          broadcast_to_channel channel, "[#{channel}] User #{nick} left channel."
+        end
       else
         client.puts "SERVER: Channel ##{channel} does not exist."
       end
     else
-      puts "Part message: #{msg}"
       client.puts 'SERVER: Channel names must begin with a \'#\'.'
+    end
+  end
+
+  def drop_user_from_all_channels msg, nick, client
+    @connections[:rooms].each do |channel, members|
+      if members.include?(nick)
+        broadcast_to_channel channel, "[#{channel}] User #{nick} left channel.", nick
+        client.puts "SERVER: You dropped from channel ##{channel}."
+      end
+      members.delete(nick)
     end
   end
 end

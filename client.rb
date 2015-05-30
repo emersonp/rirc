@@ -5,7 +5,7 @@ class Client
   def initialize (server, login_params)
     @DEBUG = true
 
-    @channel_main = nil
+    @default_channel = nil
     @channels = []
     @login = login_params
     @server = server
@@ -24,18 +24,22 @@ class Client
     when ''
       return
     when /\A\/JOIN/i
+      unless msg.match(/\/JOIN #/i)
+        puts 'Channel name must begin with a \'#\'.'.yellow
+        return
+      end
       channel = msg.sub(/^[^#]*/, '').match(/(?<=#)\S+/)[0].downcase
-      @channel_main = channel
+      @default_channel = channel
       @channels << channel
-      puts "Channel main now ##{@channel_main}"
+      puts "Default Channel now ##{@default_channel}".green
       @server.puts msg.sub(/\A\//, '')
     when /\A\/MAIN/i
-      @channel_main = msg.match(/(?<=#)\S+/)[0]
-      puts "Channel main now ##{@channel_main}"
+      @default_channel = msg.match(/(?<=#)\S+/)[0]
+      puts "Default Channel now ##{@default_channel}".green
     when /\A\//
       @server.puts msg.sub(/\A\//, '')
     else
-      @server.puts "PRIVMSG ##{@channel_main} :" + msg
+      @server.puts "PRIVMSG ##{@default_channel} :" + msg
     end
   end
 
